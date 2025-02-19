@@ -1,7 +1,8 @@
 // Imports
 import React, { useState, useEffect, useRef, useContext } from "react";
 import { View, Text, ScrollView, StyleSheet, Animated, Switch } from "react-native";
-import { Card } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Card, Checkbox } from "react-native-paper";
 import { MaterialCommunityIcons } from "react-native-vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, { Circle } from "react-native-svg";
@@ -88,8 +89,8 @@ const SwitchCard = ({ label, value, onValueChange, color, textColor, isDarkMode,
               ? "#f5dd4b" // Yellow in dark mode (on status)
               : "#f4f3f4" // Light gray in light mode (on status)
             : isDarkMode
-            ? "#f4f3f4" // Light gray in dark mode (off status)
-            : "#f4f3f4" // Light gray in light mode (off status)
+              ? "#f4f3f4" // Light gray in dark mode (off status)
+              : "#f4f3f4" // Light gray in light mode (off status)
         }
       />
     </View>
@@ -109,7 +110,9 @@ const Dashboard = ({ navigation }) => {
   const [elapsedDays, setElapsedDays] = useState(0);
   const [isWaterControlEnabled, setIsWaterControlEnabled] = useState(false);
   const [isAirControlEnabled, setIsAirControlEnabled] = useState(false);
-  
+  const [isManualMode, setIsManualMode] = useState(false);
+
+
   const cardAnimations = useRef([
     new Animated.Value(0),
     new Animated.Value(0),
@@ -133,18 +136,22 @@ const Dashboard = ({ navigation }) => {
   // WebSocket Connection
   useEffect(() => {
     let ws = null;
-
+  
     const connectWebSocket = async () => {
       try {
         const token = await AsyncStorage.getItem("userToken");
         const response = await axios.get(`${BASE_URL}/api/v1/users/getCurrentUser`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
+  
         const userId = response.data.data.user._id;
         const wsUrl = BASE_URL.replace("http", "ws");
         ws = new WebSocket(`${wsUrl}/ws?userid=${userId}`);
-
+  
+        ws.onopen = () => {
+          console.log("WebSocket connected");
+        };
+  
         ws.onmessage = (event) => {
           const data = JSON.parse(event.data);
           setSensorDataBuffer(prevBuffer => [...prevBuffer, data].slice(-5));
@@ -155,14 +162,63 @@ const Dashboard = ({ navigation }) => {
             ch4_ppm: data.ch4_ppm ? `${data.ch4_ppm} ppm` : prevData.ch4_ppm,
           }));
         };
+  
       } catch (error) {
         console.error("WebSocket Error:", error);
       }
     };
-
+  
     connectWebSocket();
     return () => ws?.close();
   }, []);
+  
+  // Function to send control messages
+  const sendMessageToSocket = (message) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    } else {
+      console.error("WebSocket is not connected.");
+    }
+  };
+  
+  // Toggle Mode (Manual/Automatic)
+  const toggleMode = () => {
+    setIsManualMode(prevMode => {
+      const newMode = !prevMode;
+      sendMessageToSocket({
+        type: "mode",
+        mode: newMode ? "manual" : "automatic",
+      });
+      return newMode;
+    });
+  };
+  
+  // Toggle Fan Control
+  const toggleFan = () => {
+    setIsAirControlEnabled(prevState => {
+      const newState = !prevState;
+      sendMessageToSocket({
+        type: "control",
+        device: "fan",
+        action: newState ? "on" : "off",
+      });
+      return newState;
+    });
+  };
+  
+  // Toggle Pump Control
+  const togglePump = () => {
+    setIsWaterControlEnabled(prevState => {
+      const newState = !prevState;
+      sendMessageToSocket({
+        type: "control",
+        device: "pump",
+        action: newState ? "on" : "off",
+      });
+      return newState;
+    });
+  };
+  
 
   // Prediction API Integration
   useEffect(() => {
@@ -175,7 +231,7 @@ const Dashboard = ({ navigation }) => {
             "Humidity (%)": latestData.humidity,
           });
           setPredictedDays(response.data.predicted_days);
-          
+
           const storedElapsedDays = await AsyncStorage.getItem('compostElapsedDays');
           setElapsedDays(storedElapsedDays ? parseFloat(storedElapsedDays) : 0);
         } catch (error) {
@@ -190,7 +246,7 @@ const Dashboard = ({ navigation }) => {
   // Animation Effects
   useEffect(() => {
     const progressPercentage = getProgressPercentage();
-    
+
     const animations = [
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -229,11 +285,21 @@ const Dashboard = ({ navigation }) => {
     container: {
       flex: 1,
       backgroundColor: isDarkMode ? "#121212" : "rgba(247, 255, 244, 0.95)",
+
+    },
+    safeArea: {
+      flex: 1,
+      backgroundColor: isDarkMode ? "#121212" : "rgba(247, 255, 244, 0.95)",
+
+    },
+    mainContainer: {
+      flex: 1,
     },
     scrollContainer: {
+      flexGrow: 1,
       paddingHorizontal: 20,
-      paddingVertical: 24,
-      paddingBottom: 10,
+      paddingTop: 24,
+      paddingBottom: 90, // Add padding to account for bottom navigation
     },
     title: {
       fontSize: 26,
@@ -325,6 +391,25 @@ const Dashboard = ({ navigation }) => {
       fontWeight: "600",
       color: isDarkMode ? "#FFFFFF" : "#000000",
     },
+    checkboxContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: 10,
+      marginLeft: 10,
+    },
+    checkboxLabel: {
+      fontSize: 16,
+      marginLeft: 8,
+      color: isDarkMode ? '#FFFFFF' : '#000000',
+      fontWeight: '600',
+    },
+    bottomNavContainer: {
+      position: 'positive',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: isDarkMode ? "#121212" : "rgba(247, 255, 244, 0.95)",
+    },
   });
 
   // Animated Circle Component
@@ -333,78 +418,128 @@ const Dashboard = ({ navigation }) => {
 
   // Render
   return (
-    <View style={styles.container}>
+
+    <ScrollView style={styles.container}>
       <TopNav navigation={navigation} />
-      <Animated.ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        {/* Compost Readiness Card */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Compost Readiness</Text>
-          <Text style={styles.subText}>
-            {predictedDays 
-              ? `${getRemainingDays().toFixed(1)} days remaining`
-              : "Getting stable data..."}
-          </Text>
+      <View style={styles.mainContainer}>
+        <Animated.ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Compost Readiness Card */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Compost Readiness</Text>
+            <Text style={styles.subText}>
+              {predictedDays
+                ? `${getRemainingDays().toFixed(1)} days remaining`
+                : "Getting stable data..."}
+            </Text>
 
-          <View style={styles.progressContainer}>
-            <Svg width="140" height="140" viewBox="0 0 100 100">
-              <Circle
-                cx="50"
-                cy="50"
-                r={CIRCLE_RADIUS}
-                stroke={isDarkMode ? "#333333" : "lightgray"}
-                strokeWidth="5"
-                fill="none"
-              />
-              <AnimatedCircle
-                cx="50"
-                cy="50"
-                r={CIRCLE_RADIUS}
-                stroke={isDarkMode ? "#4CAF50" : "green"}
-                strokeWidth="10"
-                fill="none"
-                strokeDasharray={`${CIRCLE_CIRCUMFERENCE} ${CIRCLE_CIRCUMFERENCE}`}
-                strokeDashoffset={progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [CIRCLE_CIRCUMFERENCE, 0],
-                })}
-                strokeLinecap="round"
-                transform="rotate(-90 50 50)"
-              />
-            </Svg>
-            <Text style={styles.progressText}>
-              {Math.round(progressPercentage)}%
-            </Text>
-            <Text style={styles.progressSubText}>
-              Day {elapsedDays.toFixed(0)+1} of {predictedDays ? predictedDays.toFixed(0) : '--'}
-            </Text>
+            <View style={styles.progressContainer}>
+              <Svg width="140" height="140" viewBox="0 0 100 100">
+                <Circle
+                  cx="50"
+                  cy="50"
+                  r={CIRCLE_RADIUS}
+                  stroke={isDarkMode ? "#333333" : "lightgray"}
+                  strokeWidth="5"
+                  fill="none"
+                />
+                <AnimatedCircle
+                  cx="50"
+                  cy="50"
+                  r={CIRCLE_RADIUS}
+                  stroke={isDarkMode ? "#4CAF50" : "green"}
+                  strokeWidth="10"
+                  fill="none"
+                  strokeDasharray={`${CIRCLE_CIRCUMFERENCE} ${CIRCLE_CIRCUMFERENCE}`}
+                  strokeDashoffset={progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [CIRCLE_CIRCUMFERENCE, 0],
+                  })}
+                  strokeLinecap="round"
+                  transform="rotate(-90 50 50)"
+                />
+              </Svg>
+              <Text style={styles.progressText}>
+                {Math.round(progressPercentage)}%
+              </Text>
+              <Text style={styles.progressSubText}>
+                Day {elapsedDays.toFixed(0) + 1} of {predictedDays ? predictedDays.toFixed(0) : '--'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {/* Stat Cards */}
-        <View style={styles.cardContainer}>
-          {['temperature', 'moisture', 'methane'].map((type, index) => {
-            const config = getCardConfig(type, dashboardData, isDarkMode);
-            return (
+          {/* Stat Cards */}
+          <View style={styles.cardContainer}>
+            {['temperature', 'moisture', 'methane'].map((type, index) => {
+              const config = getCardConfig(type, dashboardData, isDarkMode);
+              return (
+                <Animated.View
+                  key={index}
+                  style={{
+                    width: "48%",
+                    opacity: cardAnimations[index],
+                    transform: [
+                      {
+                        translateY: cardAnimations[index].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [50, 0],
+                        }),
+                      },
+                      {
+                        scale: cardAnimations[index].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.8, 1],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <StatCard
+                    icon={config.icon}
+                    label={config.label}
+                    value={config.value}
+                    color={config.color}
+                    textColor={config.textColor}
+                    isDarkMode={isDarkMode}
+                    styles={styles}
+                  />
+                </Animated.View>
+              );
+            })}
+          </View>
+
+          {/* Manual Mode Checkbox */}
+          <View style={styles.checkboxContainer}>
+            <Checkbox
+              status={isManualMode ? 'checked' : 'unchecked'}
+              onPress={() => setIsManualMode(!isManualMode)}
+              color={isDarkMode ? '#4CAF50' : '#1B5E20'}
+            />
+            <Text style={styles.checkboxLabel}>Manual</Text>
+          </View>
+
+          {/* Water and Air Control Cards - Only visible in manual mode */}
+          {isManualMode && (
+            <View style={styles.cardContainer}>
               <Animated.View
-                key={index}
                 style={{
                   width: "48%",
-                  opacity: cardAnimations[index],
+                  opacity: cardAnimations[3],
                   transform: [
                     {
-                      translateY: cardAnimations[index].interpolate({
+                      translateY: cardAnimations[3].interpolate({
                         inputRange: [0, 1],
                         outputRange: [50, 0],
                       }),
                     },
                     {
-                      scale: cardAnimations[index].interpolate({
+                      scale: cardAnimations[3].interpolate({
                         inputRange: [0, 1],
                         outputRange: [0.8, 1],
                       }),
@@ -412,86 +547,54 @@ const Dashboard = ({ navigation }) => {
                   ],
                 }}
               >
-                <StatCard
-                  icon={config.icon}
-                  label={config.label}
-                  value={config.value}
-                  color={config.color}
-                  textColor={config.textColor}
+                <SwitchCard
+                  label="Water Control"
+                  value={isWaterControlEnabled}
+                  onValueChange={setIsWaterControlEnabled}
+                  color={isDarkMode ? cardColors.dark.reservoir : cardColors.light.reservoir}
+                  textColor={isDarkMode ? '#4CAF50' : '#1B5E20'}
                   isDarkMode={isDarkMode}
                   styles={styles}
                 />
               </Animated.View>
-            );
-          })}
-        </View>
-
-        {/* Water and Air Control Cards */}
-        <View style={styles.cardContainer}>
-          <Animated.View
-            style={{
-              width: "48%",
-              opacity: cardAnimations[3],
-              transform: [
-                {
-                  translateY: cardAnimations[3].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-                {
-                  scale: cardAnimations[3].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.8, 1],
-                  }),
-                },
-              ],
-            }}
-          >
-            <SwitchCard
-              label="Water Control"
-              value={isWaterControlEnabled}
-              onValueChange={setIsWaterControlEnabled}
-              color={isDarkMode ? cardColors.dark.reservoir : cardColors.light.reservoir}
-              textColor={isDarkMode ? '#4CAF50' : '#1B5E20'}
-              isDarkMode={isDarkMode}
-              styles={styles}
-            />
-          </Animated.View>
-          <Animated.View
-            style={{
-              width: "48%",
-              opacity: cardAnimations[3],
-              transform: [
-                {
-                  translateY: cardAnimations[3].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  }),
-                },
-                {
-                  scale: cardAnimations[3].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.8, 1],
-                  }),
-                },
-              ],
-            }}
-          >
-            <SwitchCard
-              label="Air Control"
-              value={isAirControlEnabled}
-              onValueChange={setIsAirControlEnabled}
-              color={isDarkMode ? cardColors.dark.methane : cardColors.light.methane}
-              textColor={isDarkMode ? '#CE93D8' : '#7B1FA2'}
-              isDarkMode={isDarkMode}
-              styles={styles}
-            />
-          </Animated.View>
-        </View>
-      </Animated.ScrollView>
-      <BottomNav navigation={navigation} />
-    </View>
+              <Animated.View
+                style={{
+                  width: "48%",
+                  opacity: cardAnimations[3],
+                  transform: [
+                    {
+                      translateY: cardAnimations[3].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [50, 0],
+                      }),
+                    },
+                    {
+                      scale: cardAnimations[3].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <SwitchCard
+                  label="Air Control"
+                  value={isAirControlEnabled}
+                  onValueChange={setIsAirControlEnabled}
+                  color={isDarkMode ? cardColors.dark.methane : cardColors.light.methane}
+                  textColor={isDarkMode ? '#CE93D8' : '#7B1FA2'}
+                  isDarkMode={isDarkMode}
+                  styles={styles}
+                />
+              </Animated.View>
+            </View>
+          )}
+        </Animated.ScrollView>
+      </View>
+      <View style={styles.bottomNavContainer}>
+        <BottomNav navigation={navigation} />
+      </View>
+    </ScrollView>
   );
 };
 
