@@ -420,9 +420,11 @@ const Dashboard = ({ navigation }) => {
 
   // Render
   return (
-
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      {/* Fixed Top Navigation */}
       <TopNav navigation={navigation} />
+  
+      {/* Scrollable Content */}
       <View style={styles.mainContainer}>
         <Animated.ScrollView
           contentContainerStyle={styles.scrollContainer}
@@ -440,7 +442,7 @@ const Dashboard = ({ navigation }) => {
                 ? `${getRemainingDays().toFixed(1)} days remaining`
                 : "Getting stable data..."}
             </Text>
-
+  
             <View style={styles.progressContainer}>
               <Svg width="140" height="140" viewBox="0 0 100 100">
                 <Circle
@@ -475,7 +477,6 @@ const Dashboard = ({ navigation }) => {
               </Text>
             </View>
           </View>
-
           {/* Stat Cards */}
           <View style={styles.cardContainer}>
             {['temperature', 'moisture', 'methane'].map((type, index) => {
@@ -591,13 +592,15 @@ const Dashboard = ({ navigation }) => {
               </Animated.View>
             </View>
           )}
-        </Animated.ScrollView>
-      </View>
-      <View style={styles.bottomNavContainer}>
-        <BottomNav navigation={navigation} />
-      </View>
-    </ScrollView>
-  );
+  </Animated.ScrollView>
+    </View>
+
+    {/* Fixed Bottom Navigation */}
+    <View style={styles.bottomNavContainer}>
+      <BottomNav navigation={navigation} />
+    </View>
+  </View>
+);
 };
 
 export default Dashboard;
