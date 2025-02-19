@@ -111,6 +111,7 @@ const Dashboard = ({ navigation }) => {
   const [isWaterControlEnabled, setIsWaterControlEnabled] = useState(false);
   const [isAirControlEnabled, setIsAirControlEnabled] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
+  const ws = useRef(null);
 
 
   const cardAnimations = useRef([
@@ -135,7 +136,7 @@ const Dashboard = ({ navigation }) => {
 
   // WebSocket Connection
   useEffect(() => {
-    let ws = null;
+    // let ws = null;
   
     const connectWebSocket = async () => {
       try {
@@ -294,6 +295,7 @@ const Dashboard = ({ navigation }) => {
     },
     mainContainer: {
       flex: 1,
+      
     },
     scrollContainer: {
       flexGrow: 1,
