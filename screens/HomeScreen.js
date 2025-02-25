@@ -78,19 +78,19 @@ const SwitchCard = ({ label, value, onValueChange, color, textColor, isDarkMode,
       <Text style={[styles.statLabel, { color: textColor }]}>{label}</Text>
       <Switch
         value={value}
-        onValueChange={onValueChange}
+        onValueChange={onValueChange} // This will now call the toggleFan or togglePump function
         trackColor={{
-          false: isDarkMode ? "#767577" : "#b3b3b3", // Slightly darker gray in light mode (off status)
-          true: isDarkMode ? "#81b0ff" : "#4CAF50", // On status remains the same
+          false: isDarkMode ? "#767577" : "#b3b3b3",
+          true: isDarkMode ? "#81b0ff" : "#4CAF50",
         }}
         thumbColor={
           value
             ? isDarkMode
-              ? "#f5dd4b" // Yellow in dark mode (on status)
-              : "#f4f3f4" // Light gray in light mode (on status)
+              ? "#f5dd4b"
+              : "#f4f3f4"
             : isDarkMode
-              ? "#f4f3f4" // Light gray in dark mode (off status)
-              : "#f4f3f4" // Light gray in light mode (off status)
+              ? "#f4f3f4"
+              : "#f4f3f4"
         }
       />
     </View>
@@ -111,7 +111,7 @@ const Dashboard = ({ navigation }) => {
   const [isWaterControlEnabled, setIsWaterControlEnabled] = useState(false);
   const [isAirControlEnabled, setIsAirControlEnabled] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
-  // const ws = useRef(null);
+  const ws = useRef(null);
 
 
   const cardAnimations = useRef([
@@ -137,22 +137,22 @@ const Dashboard = ({ navigation }) => {
   // WebSocket Connection
   useEffect(() => {
     let ws = null;
-  
+
     const connectWebSocket = async () => {
       try {
         const token = await AsyncStorage.getItem("userToken");
         const response = await axios.get(`${BASE_URL}/api/v1/users/getCurrentUser`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-  
+
         const userId = response.data.data.user._id;
         const wsUrl = BASE_URL.replace("http", "ws");
         ws = new WebSocket(`${wsUrl}/ws?userid=${userId}`);
-  
+
         ws.onopen = () => {
           console.log("WebSocket connected");
         };
-  
+
         ws.onmessage = (event) => {
           const data = JSON.parse(event.data);
           setSensorDataBuffer(prevBuffer => [...prevBuffer, data].slice(-5));
@@ -163,16 +163,16 @@ const Dashboard = ({ navigation }) => {
             ch4_ppm: data.ch4_ppm ? `${data.ch4_ppm} ppm` : prevData.ch4_ppm,
           }));
         };
-  
+
       } catch (error) {
         console.error("WebSocket Error:", error);
       }
     };
-  
+
     connectWebSocket();
     return () => ws?.close();
   }, []);
-  
+
   // Function to send control messages
   const sendMessageToSocket = (message) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -181,10 +181,10 @@ const Dashboard = ({ navigation }) => {
       console.error("WebSocket is not connected.");
     }
   };
-  
+
   // Toggle Mode (Manual/Automatic)
   const toggleMode = () => {
-    setIsManualMode(prevMode => {
+    setIsManualMode((prevMode) => {
       const newMode = !prevMode;
       sendMessageToSocket({
         type: "mode",
@@ -193,7 +193,7 @@ const Dashboard = ({ navigation }) => {
       return newMode;
     });
   };
-  
+
   // Toggle Fan Control
   const toggleFan = () => {
     setIsAirControlEnabled(prevState => {
@@ -205,8 +205,9 @@ const Dashboard = ({ navigation }) => {
       });
       return newState;
     });
+    // console.log("Fan Control Enabled:", newState);
   };
-  
+
   // Toggle Pump Control
   const togglePump = () => {
     setIsWaterControlEnabled(prevState => {
@@ -218,8 +219,9 @@ const Dashboard = ({ navigation }) => {
       });
       return newState;
     });
+    // console.log("Pump Control Enabled:", newState);
   };
-  
+
 
   // Prediction API Integration
   useEffect(() => {
@@ -295,7 +297,7 @@ const Dashboard = ({ navigation }) => {
     },
     mainContainer: {
       flex: 1,
-      
+
     },
     scrollContainer: {
       flexGrow: 1,
@@ -423,7 +425,7 @@ const Dashboard = ({ navigation }) => {
     <View style={styles.container}>
       {/* Fixed Top Navigation */}
       <TopNav navigation={navigation} />
-  
+
       {/* Scrollable Content */}
       <View style={styles.mainContainer}>
         <Animated.ScrollView
@@ -442,7 +444,7 @@ const Dashboard = ({ navigation }) => {
                 ? `${getRemainingDays().toFixed(1)} days remaining`
                 : "Getting stable data..."}
             </Text>
-  
+
             <View style={styles.progressContainer}>
               <Svg width="140" height="140" viewBox="0 0 100 100">
                 <Circle
@@ -521,7 +523,7 @@ const Dashboard = ({ navigation }) => {
           <View style={styles.checkboxContainer}>
             <Checkbox
               status={isManualMode ? 'checked' : 'unchecked'}
-              onPress={() => setIsManualMode(!isManualMode)}
+              onPress={toggleMode} // Call toggleMode instead of directly setting state
               color={isDarkMode ? '#4CAF50' : '#1B5E20'}
             />
             <Text style={styles.checkboxLabel}>Manual</Text>
@@ -553,7 +555,7 @@ const Dashboard = ({ navigation }) => {
                 <SwitchCard
                   label="Water Control"
                   value={isWaterControlEnabled}
-                  onValueChange={setIsWaterControlEnabled}
+                  onValueChange={togglePump} // Call togglePump function
                   color={isDarkMode ? cardColors.dark.reservoir : cardColors.light.reservoir}
                   textColor={isDarkMode ? '#4CAF50' : '#1B5E20'}
                   isDarkMode={isDarkMode}
@@ -583,7 +585,7 @@ const Dashboard = ({ navigation }) => {
                 <SwitchCard
                   label="Air Control"
                   value={isAirControlEnabled}
-                  onValueChange={setIsAirControlEnabled}
+                  onValueChange={toggleFan} // Call toggleFan function
                   color={isDarkMode ? cardColors.dark.methane : cardColors.light.methane}
                   textColor={isDarkMode ? '#CE93D8' : '#7B1FA2'}
                   isDarkMode={isDarkMode}
@@ -592,15 +594,15 @@ const Dashboard = ({ navigation }) => {
               </Animated.View>
             </View>
           )}
-  </Animated.ScrollView>
-    </View>
+        </Animated.ScrollView>
+      </View>
 
-    {/* Fixed Bottom Navigation */}
-    <View style={styles.bottomNavContainer}>
-      <BottomNav navigation={navigation} />
+      {/* Fixed Bottom Navigation */}
+      <View style={styles.bottomNavContainer}>
+        <BottomNav navigation={navigation} />
+      </View>
     </View>
-  </View>
-);
+  );
 };
 
 export default Dashboard;
